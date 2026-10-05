@@ -1,0 +1,86 @@
+name: Dev Lug'at build
+
+# Builds the Dev Lug'at flashcard app:
+#  - iOS: an unsigned .ipa to sign and install with Sideloadly / AltStore (or Xcode)
+#  - Android: a release .apk that installs directly
+on:
+  push:
+    paths:
+      - "dev_lugat/**"
+      - ".github/workflows/dev_lugat.yml"
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: "3.47.6"
+
+jobs:
+  ios:
+    name: iOS (.ipa)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: dev_lugat
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter test
+
+      - name: Build iOS app (no code signing)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          rm -rf build/ipa
+          mkdir -p build/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
+          cd build/ipa
+          zip -qry ../DevLugat.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DevLugat-iOS-ipa
+          path: dev_lugat/build/DevLugat.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+  android:
+    name: Android (.apk)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: dev_lugat
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter build apk --release
+
+      - name: Rename APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk build/DevLugat.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DevLugat-Android-apk
+          path: dev_lugat/build/DevLugat.apk
+          if-no-files-found: error
+          retention-days: 30
